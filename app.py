@@ -9,12 +9,12 @@ import zipfile
 import os
 import time
 import contextily as cx
-from PIL import Image # Tambah ini untuk memaparkan gambar
+from PIL import Image
 
 # --- TETAPAN KATA LALUAN ---
-PASSWORD = "admin123" # Kata laluan baru
+PASSWORD = "admin123"
 
-# 1. Fungsi penukaran Decimal ke DMS
+# 1. Fungsi penukaran Decimal ke DMS (Degree, Minute, Second)
 def format_to_dms(deg):
     d = int(deg)
     md = abs(deg - d) * 60
@@ -22,29 +22,30 @@ def format_to_dms(deg):
     sd = (md - m) * 60
     return f"{d}°{m:02d}'{sd:02.0f}\""
 
+st.set_page_config(layout="wide")
 st.title("Paparan & Ekspot Polygon dari CSV")
 
 # --- SISTEM LOG MASUK & SIDEBAR ---
 with st.sidebar:
-    # --- TAMBAH LOGO ---
+    # --- PAPAR LOGO ---
     try:
-        # TUKAR "logo.png" kepada nama fail logo anda
+        # Pastikan fail logo.png wujud dalam repositori GitHub
         img = Image.open("logo.png") 
         st.image(img, use_container_width=True)
     except:
-        st.warning("Logo tidak dijumpai. Sila pastikan fail 'logo.png' ada dalam repositori.")
+        st.warning("Logo 'logo.png' tidak dijumpai.")
     
-    # --- TAMBAH LABEL ---
+    # --- LABEL SISTEM ---
     st.markdown("### SISTEM PENGURUSAN MAKLUMAT TANAH")
     st.markdown("---")
 
     st.subheader("Log Masuk")
     user_password = st.text_input("Masukkan Kata Laluan", type="password")
 
+# --- LOGIK LOG MASUK ---
 if user_password == PASSWORD:
     st.sidebar.success("Log masuk berjaya!")
     
-    # --- FUNGSI APLIKASI UTAMA ---
     # Upload fail CSV
     uploaded_file = st.file_uploader("Upload fail CSV", type=["csv"])
 
@@ -62,15 +63,14 @@ if user_password == PASSWORD:
             st.sidebar.markdown("---")
             st.sidebar.subheader("Tetapan Peta")
             
-            # Input kod EPSG
-            epsg_code = st.sidebar.text_input("Kod EPSG (Cth: 4326, 3857, 3386)", value="4326")
+            # Input kod EPSG (Default 4390)
+            epsg_code = st.sidebar.text_input("Kod EPSG", value="4390")
             
             show_satellite = st.sidebar.checkbox("Buka Layer Satelit (On/Off)")
             
-            # --- TAMBAHAN: SLIDER ZOOM KELUAR ---
+            # --- TETAPAN PAPARAN ---
             st.sidebar.markdown("---")
             st.sidebar.subheader("Tetapan Paparan")
-            # Slider untuk margin dalam meter (0 hingga 500 meter)
             zoom_margin = st.sidebar.slider("Zoom Keluar (Margin dalam Meter)", min_value=0, max_value=500, value=10, step=5)
             
             st.sidebar.markdown("---")
@@ -80,10 +80,7 @@ if user_password == PASSWORD:
             show_area = st.sidebar.checkbox("Papar Label Luas")
 
             # --- PEMPROSESAN DATA GEOSPATIAL ---
-            # Tukar kepada tuple koordinat
             coords = list(zip(df["E"], df["N"]))
-            
-            # Bina polygon menggunakan Shapely
             polygon = Polygon(coords)
 
             # Tukar ke GeoDataFrame dan tetapkan CRS berdasarkan input EPSG
@@ -148,7 +145,7 @@ if user_password == PASSWORD:
                 except Exception as e:
                     st.error(f"Gagal memuatkan layer satelit: {e}")
 
-            # --- LOGIK LABEL STESEN (STN) ---
+            # --- LOGIK LABEL ---
             if show_stn:
                 points = list(polygon.exterior.coords)
                 for j, p in enumerate(points[:-1]):
@@ -159,38 +156,30 @@ if user_password == PASSWORD:
                 for p in points[:-1]:
                     ax.scatter(p[0], p[1], color='black', s=20, zorder=5)
 
-            # --- LOGIK LABEL BEARING & JARAK ---
             if show_labels:
                 points = list(polygon.exterior.coords)
                 for i in range(len(points) - 1):
                     p1 = points[i]
                     p2 = points[i+1]
-                    
                     dist = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
-                    
                     angle_rad = np.arctan2(p2[0] - p1[0], p2[1] - p1[1])
                     bearing_deg = np.degrees(angle_rad) % 360
                     bearing_str = format_to_dms(bearing_deg)
-                    
                     mid_x = (p1[0] + p2[0]) / 2
                     mid_y = (p1[1] + p2[1]) / 2
-                    
                     dx = p2[0] - p1[0]
                     dy = p2[1] - p1[1]
                     line_angle_rad = np.arctan2(dy, dx)
                     line_angle_deg = np.degrees(line_angle_rad)
-                    
                     rotation = line_angle_deg
                     if 90 < line_angle_deg <= 270 or -270 < line_angle_deg <= -90:
                         rotation = line_angle_deg + 180
-                    
                     label_text = f"{dist:.2f}m\n{bearing_str}"
                     ax.text(mid_x, mid_y, label_text, 
                             fontsize=10, color='red', fontweight='bold',
                             ha='center', va='center', 
                             rotation=rotation, rotation_mode='anchor', zorder=10)
 
-            # --- PAPARKAN LABEL LUAS ---
             if show_area:
                 ax.text(centroid.x, centroid.y, f"LUAS\n{area:.2f} m²", 
                         fontsize=12, color='darkblue', fontweight='bold',
@@ -198,10 +187,8 @@ if user_password == PASSWORD:
                         bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', boxstyle='round,pad=0.5'),
                         zorder=15)
 
-            # --- HADKAN KAWASAN PLOT (LIMITS) DENGAN MARGIN ---
-            bounds = gdf.total_bounds # [minx, miny, maxx, maxy]
-            
-            # Menggunakan nilai dari slider zoom_margin
+            # --- HADKAN KAWASAN PLOT ---
+            bounds = gdf.total_bounds
             ax.set_xlim(bounds[0] - zoom_margin, bounds[2] + zoom_margin)
             ax.set_ylim(bounds[1] - zoom_margin, bounds[3] + zoom_margin)
             
