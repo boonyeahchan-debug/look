@@ -11,13 +11,12 @@ import time
 import contextily as cx
 from PIL import Image
 
-# ================== CONFIG ==================
+# ================= CONFIG =================
 PASSWORD = "admin123"
-
 st.set_page_config(layout="wide")
 st.title("Paparan & Ekspot Polygon dari CSV")
 
-# ================== UTILITIES ==================
+# ================= UTILITIES =================
 def format_to_dms(deg):
     d = int(deg)
     md = abs(deg - d) * 60
@@ -25,11 +24,11 @@ def format_to_dms(deg):
     sd = (md - m) * 60
     return f"{d}°{m:02d}'{sd:02.0f}\""
 
-@st.cache_data(show_spinner=False)
 def reproject_to_3857(gdf):
+    """Convert GeoDataFrame to Web Mercator safely"""
     return gdf.to_crs(epsg=3857)
 
-# ================== SIDEBAR ==================
+# ================= SIDEBAR =================
 with st.sidebar:
     try:
         img = Image.open("logo.png")
@@ -43,7 +42,7 @@ with st.sidebar:
     st.subheader("Log Masuk")
     user_password = st.text_input("Masukkan Kata Laluan", type="password")
 
-# ================== LOGIN ==================
+# ================= LOGIN =================
 if user_password == PASSWORD:
     st.sidebar.success("Log masuk berjaya!")
 
@@ -60,10 +59,7 @@ if user_password == PASSWORD:
             st.sidebar.markdown("---")
             st.sidebar.subheader("Tetapan Peta")
             epsg_code = st.sidebar.text_input("Kod EPSG", value="4390")
-            show_satellite = st.sidebar.checkbox("Buka Layer Satelit (On/Off)")
-
-            if show_satellite:
-                st.sidebar.info("Layer satelit menggunakan Web Mercator (EPSG:3857).")
+            show_satellite = st.sidebar.checkbox("Buka Layer Satelit (On / Off)")
 
             st.sidebar.markdown("---")
             zoom_margin = st.sidebar.slider(
@@ -82,37 +78,33 @@ if user_password == PASSWORD:
             polygon = Polygon(coords)
 
             gdf = gpd.GeoDataFrame(
-                index=[0],
                 geometry=[polygon],
                 crs=f"EPSG:{epsg_code}"
             )
 
-            area = gdf.geometry.area[0]
-            centroid = gdf.geometry.centroid[0]
+            area = gdf.geometry.area.iloc[0]
+            centroid = gdf.geometry.centroid.iloc[0]
 
             # ---------- EXPORT ----------
             st.subheader("Ekspot Data")
             col1, col2 = st.columns(2)
 
-            geojson_data = gdf.to_json()
             col1.download_button(
                 "Download GeoJSON",
-                geojson_data,
+                gdf.to_json(),
                 "polygon.geojson",
                 "application/json"
             )
 
             with col2:
                 zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "a", zipfile.ZIP_DEFLATED) as zip_file:
-                    name = "temp_polygon"
+                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
+                    name = "polygon"
                     gdf.to_file(f"{name}.shp")
                     time.sleep(1)
                     for ext in ["shp", "shx", "dbf", "prj"]:
-                        f = f"{name}.{ext}"
-                        if os.path.exists(f):
-                            zip_file.write(f)
-
+                        if os.path.exists(f"{name}.{ext}"):
+                            zip_file.write(f"{name}.{ext}")
                 st.download_button(
                     "Download Shapefile (.zip)",
                     zip_buffer.getvalue(),
@@ -132,8 +124,8 @@ if user_password == PASSWORD:
                 ax=ax,
                 edgecolor="red",
                 facecolor=fill_color,
-                alpha=0.6,
                 linewidth=2,
+                alpha=0.6,
                 zorder=10
             )
 
@@ -149,52 +141,34 @@ if user_password == PASSWORD:
                     st.warning("Layer satelit gagal dimuatkan.")
 
             # ---------- LABELS ----------
-            points = list(polygon.exterior.coords)
+            pts = list(polygon.exterior.coords)
 
-            for i, p in enumerate(points[:-1]):
+            for i, p in enumerate(pts[:-1]):
                 ax.scatter(p[0], p[1], color="black", s=20, zorder=20)
                 if show_stn:
-                    ax.text(
-                        p[0], p[1],
-                        f" STN {i+1}",
-                        fontsize=9,
-                        fontweight="bold",
-                        zorder=25
-                    )
+                    ax.text(p[0], p[1], f" STN {i+1}", fontsize=9, fontweight="bold")
 
             if show_labels:
-                for i in range(len(points) - 1):
-                    p1, p2 = points[i], points[i + 1]
+                for i in range(len(pts) - 1):
+                    p1, p2 = pts[i], pts[i + 1]
                     dist = np.hypot(p2[0] - p1[0], p2[1] - p1[1])
-                    angle = np.degrees(np.arctan2(p2[0] - p1[0], p2[1] - p1[1])) % 360
-                    bearing = format_to_dms(angle)
-
-                    mid_x = (p1[0] + p2[0]) / 2
-                    mid_y = (p1[1] + p2[1]) / 2
-
-                    ax.text(
-                        mid_x, mid_y,
-                        f"{dist:.2f} m\n{bearing}",
-                        fontsize=10,
-                        color="yellow",
-                        fontweight="bold",
-                        ha="center",
-                        va="center",
-                        zorder=30
+                    bearing = format_to_dms(
+                        np.degrees(np.arctan2(p2[0] - p1[0], p2[1] - p1[1])) % 360
                     )
+                    mx, my = (p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2
+                    ax.text(mx, my, f"{dist:.2f} m\n{bearing}",
+                            color="yellow", fontweight="bold", ha="center")
 
             if show_area:
                 ax.text(
-                    centroid.x,
-                    centroid.y,
+                    centroid.x, centroid.y,
                     f"LUAS\n{area:.2f} m²",
-                    fontsize=12,
                     color="white",
+                    fontsize=12,
                     fontweight="bold",
                     ha="center",
                     va="center",
-                    bbox=dict(facecolor="black", alpha=0.5, boxstyle="round,pad=0.5"),
-                    zorder=35
+                    bbox=dict(facecolor="black", alpha=0.5, boxstyle="round")
                 )
 
             # ---------- EXTENT ----------
