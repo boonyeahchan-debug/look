@@ -1,7 +1,8 @@
 streamlit
-pandas
 geopandas
 shapely
 matplotlib
 numpy
+pillow
 contextily
+pyproj
