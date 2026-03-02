@@ -12,10 +12,7 @@ import contextily as cx
 # ================= 1. CONFIGURATION =================
 st.set_page_config(layout="wide", page_title="WebGIS Google Satellite")
 
-# ================= 2. UTILITIES =================
-# Function removed as requested
-
-# XYZ URL for Google Satellite
+# XYZ URL untuk Google Satellite
 GOOGLE_SATELLITE_URL = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
 
 # ================= 3. SIDEBAR =================
@@ -75,7 +72,8 @@ if uploaded_file:
             # Task 3: Basemap Satelit
             if show_satellite:
                 try:
-                    # Menambah zoom_adjust=-1 untuk mengelakkan ralat 404 pada zoom tinggi
+                    # --- PEMBAIKAN 404 Ralat di sini ---
+                    # zoom_adjust=-1 mengurangkan tahap zoom untuk mengelakkan ralat URL 404
                     cx.add_basemap(ax, source=GOOGLE_SATELLITE_URL, zoom='auto', zoom_adjust=-1)
                 except Exception as e:
                     st.warning(f"Satelit offline: {e}")
