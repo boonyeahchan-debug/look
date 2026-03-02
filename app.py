@@ -10,102 +10,96 @@ import os
 import contextily as cx
 
 # ================= 1. CONFIGURATION =================
-st.set_page_config(layout="wide", page_title="WebGIS Kertau 4390")
+st.set_page_config(layout="wide", page_title="WebGIS WGS84 & Kertau")
+
+st.markdown("""
+    <style>
+    .main { background-color: #f8f9fa; }
+    .stMetric { background-color: #ffffff; padding: 10px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    </style>
+    """, unsafe_allow_html=True)
 
 # ================= 2. UTILITIES =================
-def format_to_dms(deg):
-    """Format decimal degrees to DMS for plan labeling."""
-    d = int(deg)
-    md = abs(deg - d) * 60
-    m = int(md)
-    sd = (md - m) * 60
-    return f"{d}°{m:02d}'{sd:02.0f}\""
-
-# URL XYZ for Google Satellite
-GOOGLE_SATELLITE_URL = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
+# Removed format_to_dms function as bearing/distance labels are removed
 
 # ================= 3. SIDEBAR =================
 with st.sidebar:
-    st.header("⚙️ Map Settings")
-    st.info("Input & Calculations: EPSG:4390 (Kertau RSO)\nDisplay: Web Mercator (3857)")
+    st.header("⚙️ Tetapan Koordinat")
+    # User input coordinates are treated as 4390
+    st.info("Input: EPSG:4390 (Kertau)\nDisplay: WGS 84 (Satelit)")
     
-    # Layer Controls
-    show_labels = st.checkbox("Show Bearing & Distance", value=True)
-    show_area = st.checkbox("Show Area Label", value=True)
+    st.subheader("Kawalan Lapisan")
+    show_satellite = st.checkbox("Paparan Satelit", value=True)
+    # Removed show_labels checkbox
+    show_area = st.checkbox("Label Luas (Value 4390)", value=True)
     
-    st.markdown("---")
-    zoom_margin = st.slider("Zoom Margin (Meters)", 0, 1000, 200, 50)
+    zoom_margin = st.slider("Margin Zoom (Meter)", 0, 200, 50, 10)
 
 # ================= 4. MAIN INTERFACE =================
-st.title("🗺️ Polygon Plotting System (EPSG:4390)")
+st.title("🗺️ WebGIS: Visual WGS 84 | Data EPSG:4390")
 
-uploaded_file = st.file_uploader("Upload CSV (E, N columns in meters)", type=["csv"])
+uploaded_file = st.file_uploader("Muat naik fail CSV (Kolum E, N dalam format Kertau)", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     
     if {"E", "N"}.issubset(df.columns):
-        # --- 1. ORIGINAL GEOMETRY (EPSG:4390) ---
+        # --- LANGKAH A: BINA GEOMETRI ASAL (EPSG:4390) ---
         coords = list(zip(df["E"], df["N"]))
         poly_orig = Polygon(coords)
         gdf_4390 = gpd.GeoDataFrame(geometry=[poly_orig], crs="EPSG:4390")
         
-        # Real Area Calculation (Kertau RSO)
+        # Pengiraan Luas Sebenar (Guna 4390)
         area_4390 = gdf_4390.geometry.area.iloc[0]
         
-        # --- 2. REPROJECTION FOR VISUALIZATION (EPSG:3857) ---
-        # Contextily satellite tiles require EPSG:3857 for correct alignment
-        gdf_3857 = gdf_4390.to_crs(epsg=3857)
-        poly_3857 = gdf_3857.geometry.iloc[0]
-
-        # --- 3. PLOTTING ---
-        fig, ax = plt.subplots(figsize=(10, 10))
+        # --- LANGKAH B: REPROJECT UNTUK VISUAL (WGS 84 / 3857) ---
+        # Kita guna 3857 untuk plotting supaya basemap satelit tidak herot
+        gdf_visual = gdf_4390.to_crs(epsg=3857)
+        poly_visual = gdf_visual.geometry.iloc[0]
         
-        # Plot Polygon (Using visual 3857 coordinates)
-        gdf_3857.plot(ax=ax, edgecolor="#FF0000", facecolor="none", linewidth=2.5, zorder=20)
+        # Paparan Metrik
+        col_m1, col_m2 = st.columns(2)
+        col_m1.metric("Luas (Kertau 4390)", f"{area_4390:.2f} m²")
+        col_m2.metric("Sistem Visual", "WGS 84 / Web Mercator")
 
-        # Add Google Satellite using XYZ URL with zoom adjustment to prevent 404s
-        try:
-            # zoom_adjust=-2 ensures we don't request too high a zoom level
-            cx.add_basemap(ax, source=GOOGLE_SATELLITE_URL, zoom='auto', zoom_adjust=-2)
-        except Exception as e:
-            st.warning(f"Satellite map failed to load: {e}")
-
-        # --- 4. LABELING (Hybrid Logic) ---
-        pts_3857 = list(poly_3857.exterior.coords)
-        pts_4390 = list(poly_orig.exterior.coords)
-
-        # Labels for Bearing & Distance (Value from 4390, Position on 3857)
-        if show_labels:
-            for i in range(len(pts_4390) - 1):
-                p1_43, p2_43 = pts_4390[i], pts_4390[i+1]
-                dist = np.hypot(p2_43[0] - p1_43[0], p2_43[1] - p1_43[1])
-                bearing = format_to_dms(np.degrees(np.arctan2(p2_43[0]-p1_43[0], p2_43[1]-p1_43[1])) % 360)
-                
-                # Text location on map (3857)
-                p1_38, p2_38 = pts_3857[i], pts_3857[i+1]
-                mx, my = (p1_38[0]+p2_38[0])/2, (p1_38[1]+p2_38[1])/2
-                
-                ax.text(mx, my, f"{dist:.2f}m\n{bearing}", color="#FFFF00", fontsize=8, 
-                        fontweight="bold", ha="center", va="center",
-                        bbox=dict(facecolor='black', alpha=0.5, edgecolor='none'))
-
-        # Area Label
-        if show_area:
-            centroid = poly_3857.centroid
-            ax.text(centroid.x, centroid.y, f"LUAS (4390)\n{area_4390:.2f} m²", 
-                    color="white", ha="center", fontweight="bold",
-                    bbox=dict(facecolor="#FF0000", alpha=0.7, boxstyle="round,pad=0.3"))
-
-        # --- 5. EXTENT & DISPLAY ---
-        bounds = gdf_3857.total_bounds
-        ax.set_xlim(bounds[0] - zoom_margin, bounds[2] + zoom_margin)
-        ax.set_ylim(bounds[1] - zoom_margin, bounds[3] + zoom_margin)
-        ax.set_axis_off()
+        col_data, col_map = st.columns([1, 2])
         
-        st.pyplot(fig)
-        
-        # Export (Task 2)
-        st.download_button("Download GeoJSON (Kertau)", gdf_4390.to_json(), "lot_kertau.geojson")
+        with col_data:
+            st.write("Senarai Koordinat (E, N):")
+            st.dataframe(df, height=250)
+            
+            # Export (Tetap kekalkan 4390 untuk profesional)
+            st.subheader("📥 Eksport")
+            st.download_button("Download GeoJSON (4390)", gdf_4390.to_json(), "kertau_data.geojson")
+
+        with col_map:
+            fig, ax = plt.subplots(figsize=(10, 10))
+            
+            # Plot Polygon Visual
+            gdf_visual.plot(ax=ax, edgecolor="red", facecolor="none", linewidth=2, zorder=10)
+
+            # Task 3: Basemap Satelit (WGS 84 / 3857 compatible)
+            if show_satellite:
+                try:
+                    cx.add_basemap(ax, source=cx.providers.Esri.WorldImagery)
+                except:
+                    st.warning("Satelit offline.")
+
+            # --- TASK 4: LABELS (Area only) ---
+            
+            # Bearing and Distance labeling block removed
+
+            if show_area:
+                c_v = poly_visual.centroid
+                ax.text(c_v.x, c_v.y, f"LUAS (4390)\n{area_4390:.2f} m²", 
+                        color="white", ha="center", fontweight="bold",
+                        bbox=dict(facecolor="red", alpha=0.7, boxstyle="round"))
+
+            # Set extent
+            bounds = gdf_visual.total_bounds
+            ax.set_xlim(bounds[0]-zoom_margin, bounds[2]+zoom_margin)
+            ax.set_ylim(bounds[1]-zoom_margin, bounds[3]+zoom_margin)
+            ax.set_axis_off()
+            st.pyplot(fig)
     else:
-        st.error("CSV file does not contain 'E' and 'N' columns.")
+        st.error("Pastikan CSV ada kolum E dan N.")
