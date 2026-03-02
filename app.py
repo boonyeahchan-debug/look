@@ -10,33 +10,27 @@ import os
 import contextily as cx
 
 # ================= 1. CONFIGURATION =================
-st.set_page_config(layout="wide", page_title="WebGIS WGS84 & Kertau")
-
-st.markdown("""
-    <style>
-    .main { background-color: #f8f9fa; }
-    .stMetric { background-color: #ffffff; padding: 10px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
-    </style>
-    """, unsafe_allow_html=True)
+st.set_page_config(layout="wide", page_title="WebGIS Google Satellite")
 
 # ================= 2. UTILITIES =================
-# Removed format_to_dms function as bearing/distance labels are removed
+# Function removed as requested
+
+# XYZ URL for Google Satellite
+GOOGLE_SATELLITE_URL = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
 
 # ================= 3. SIDEBAR =================
 with st.sidebar:
     st.header("⚙️ Tetapan Koordinat")
-    # User input coordinates are treated as 4390
-    st.info("Input: EPSG:4390 (Kertau)\nDisplay: WGS 84 (Satelit)")
+    st.info("Input: EPSG:4390 (Kertau)\nDisplay: Web Mercator (3857)")
     
     st.subheader("Kawalan Lapisan")
     show_satellite = st.checkbox("Paparan Satelit", value=True)
-    # Removed show_labels checkbox
     show_area = st.checkbox("Label Luas (Value 4390)", value=True)
     
-    zoom_margin = st.slider("Margin Zoom (Meter)", 0, 200, 50, 10)
+    zoom_margin = st.slider("Margin Zoom (Meter)", 0, 1000, 200, 50)
 
 # ================= 4. MAIN INTERFACE =================
-st.title("🗺️ WebGIS: Visual WGS 84 | Data EPSG:4390")
+st.title("🗺️ WebGIS: Google Satellite Layer (EPSG:4390)")
 
 uploaded_file = st.file_uploader("Muat naik fail CSV (Kolum E, N dalam format Kertau)", type=["csv"])
 
@@ -52,15 +46,15 @@ if uploaded_file:
         # Pengiraan Luas Sebenar (Guna 4390)
         area_4390 = gdf_4390.geometry.area.iloc[0]
         
-        # --- LANGKAH B: REPROJECT UNTUK VISUAL (WGS 84 / 3857) ---
-        # Kita guna 3857 untuk plotting supaya basemap satelit tidak herot
+        # --- LANGKAH B: REPROJECT UNTUK VISUAL (EPSG:3857) ---
+        # Data Kertau dipetakan ke Web Mercator agar satelit muncul
         gdf_visual = gdf_4390.to_crs(epsg=3857)
         poly_visual = gdf_visual.geometry.iloc[0]
         
         # Paparan Metrik
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("Luas (Kertau 4390)", f"{area_4390:.2f} m²")
-        col_m2.metric("Sistem Visual", "WGS 84 / Web Mercator")
+        col_m2.metric("Sistem Visual", "Google Satellite (3857)")
 
         col_data, col_map = st.columns([1, 2])
         
@@ -68,7 +62,7 @@ if uploaded_file:
             st.write("Senarai Koordinat (E, N):")
             st.dataframe(df, height=250)
             
-            # Export (Tetap kekalkan 4390 untuk profesional)
+            # Export
             st.subheader("📥 Eksport")
             st.download_button("Download GeoJSON (4390)", gdf_4390.to_json(), "kertau_data.geojson")
 
@@ -76,24 +70,22 @@ if uploaded_file:
             fig, ax = plt.subplots(figsize=(10, 10))
             
             # Plot Polygon Visual
-            gdf_visual.plot(ax=ax, edgecolor="red", facecolor="none", linewidth=2, zorder=10)
+            gdf_visual.plot(ax=ax, edgecolor="#FF0000", facecolor="none", linewidth=2.5, zorder=10)
 
-            # Task 3: Basemap Satelit (WGS 84 / 3857 compatible)
+            # Task 3: Basemap Satelit
             if show_satellite:
                 try:
-                    cx.add_basemap(ax, source=cx.providers.Esri.WorldImagery)
-                except:
-                    st.warning("Satelit offline.")
+                    # Menambah zoom_adjust=-1 untuk mengelakkan ralat 404 pada zoom tinggi
+                    cx.add_basemap(ax, source=GOOGLE_SATELLITE_URL, zoom='auto', zoom_adjust=-1)
+                except Exception as e:
+                    st.warning(f"Satelit offline: {e}")
 
             # --- TASK 4: LABELS (Area only) ---
-            
-            # Bearing and Distance labeling block removed
-
             if show_area:
                 c_v = poly_visual.centroid
                 ax.text(c_v.x, c_v.y, f"LUAS (4390)\n{area_4390:.2f} m²", 
-                        color="white", ha="center", fontweight="bold",
-                        bbox=dict(facecolor="red", alpha=0.7, boxstyle="round"))
+                        color="white", ha="center", fontweight="bold", fontsize=12,
+                        bbox=dict(facecolor="#FF0000", alpha=0.7, boxstyle="round,pad=0.5"))
 
             # Set extent
             bounds = gdf_visual.total_bounds
