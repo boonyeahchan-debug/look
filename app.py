@@ -27,7 +27,7 @@ GOOGLE_SATELLITE_URL = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
 # ================= 3. SIDEBAR =================
 with st.sidebar:
     st.header("⚙️ Map Settings")
-    st.info("Input & Calculations: EPSG:4390\nDisplay: Web Mercator (3857)")
+    st.info("Input & Calculations: EPSG:4390 (Kertau RSO)\nDisplay: Web Mercator (3857)")
     
     # Layer Controls
     show_labels = st.checkbox("Show Bearing & Distance", value=True)
@@ -66,6 +66,7 @@ if uploaded_file:
 
         # Add Google Satellite using XYZ URL with zoom adjustment to prevent 404s
         try:
+            # zoom_adjust=-2 ensures we don't request too high a zoom level
             cx.add_basemap(ax, source=GOOGLE_SATELLITE_URL, zoom='auto', zoom_adjust=-2)
         except Exception as e:
             st.warning(f"Satellite map failed to load: {e}")
@@ -92,7 +93,7 @@ if uploaded_file:
         # Area Label
         if show_area:
             centroid = poly_3857.centroid
-            ax.text(centroid.x, centroid.y, f"LUAS \n{area_4390:.2f} m²", 
+            ax.text(centroid.x, centroid.y, f"LUAS (4390)\n{area_4390:.2f} m²", 
                     color="white", ha="center", fontweight="bold",
                     bbox=dict(facecolor="#FF0000", alpha=0.7, boxstyle="round,pad=0.3"))
 
