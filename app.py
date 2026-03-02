@@ -7,152 +7,169 @@ import numpy as np
 import io
 import zipfile
 import os
-import time
 import contextily as cx
 from PIL import Image
 
-# ================= CONFIG =================
-PASSWORD = "admin123"
-st.set_page_config(layout="wide")
-st.title("Paparan & Ekspot Polygon dari CSV")
+# ================= CONFIGURATION =================
+st.set_page_config(layout="wide", page_title="WebGIS Malaysia")
+
+# CSS untuk mencantikkan paparan
+st.markdown("""
+    <style>
+    .main { backgroundColor: #f0f2f6; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
+    </style>
+    """, unsafe_allow_选取=True)
 
 # ================= UTILITIES =================
 def format_to_dms(deg):
+    """Tukar darjah decimal ke format DMS (D°M'S\")"""
     d = int(deg)
     md = abs(deg - d) * 60
     m = int(md)
     sd = (md - m) * 60
     return f"{d}°{m:02d}'{sd:02.0f}\""
 
-# ================= SIDEBAR =================
+# ================= SIDEBAR (Task 4) =================
 with st.sidebar:
-    try:
-        img = Image.open("logo.png")
-        st.image(img, use_container_width=True)
-    except:
-        st.warning("Logo 'logo.png' tidak dijumpai.")
-
-    st.markdown("### SISTEM PENGURUSAN MAKLUMAT TANAH")
+    st.header("🛰️ Tetapan Sistem")
     st.markdown("---")
+    
+    # Input EPSG (Default 4390 untuk Kertau RSO)
+    epsg_code = st.text_input("Sistem Koordinat (EPSG)", value="4390")
+    
+    st.subheader("Kawalan Lapisan (On/Off)")
+    show_satellite = st.checkbox("Paparan Satelit", value=True)
+    show_stn = st.checkbox("Label Stesen (STN)", value=True)
+    show_labels = st.checkbox("Bearing & Jarak", value=True)
+    show_area = st.checkbox("Label Luas", value=True)
+    
+    st.markdown("---")
+    zoom_margin = st.sidebar.slider("Margin Zoom (Meter)", 0, 500, 50, 10)
 
-    st.subheader("Log Masuk")
-    user_password = st.text_input("Masukkan Kata Laluan", type="password")
+# ================= MAIN INTERFACE =================
+st.title("🗺️ WebGIS: Plotting Polygon & Analisis Tanah")
+st.info("Sila muat naik fail CSV yang mengandungi kolum **E** (Easting) dan **N** (Northing).")
 
-# ================= LOGIN =================
-if user_password == PASSWORD:
-    st.sidebar.success("Log masuk berjaya!")
+uploaded_file = st.file_uploader("Pilih Fail CSV", type=["csv"])
 
-    uploaded_file = st.file_uploader("Upload fail CSV", type=["csv"])
+if uploaded_file:
+    df = pd.read_csv(uploaded_file)
+    
+    col_data, col_map = st.columns([1, 2])
 
-    if uploaded_file is not None:
-        df = pd.read_csv(uploaded_file)
-        st.write("Data yang dimuat naik:")
-        st.dataframe(df)
-
+    with col_data:
+        st.subheader("📊 Data Mentah")
+        st.dataframe(df, height=300)
+        
         if {"E", "N"}.issubset(df.columns):
+            # --- PEMPROSESAN GEOMETRI (Task 1) ---
+            coords = list(zip(df["E"], df["N"]))
+            poly_geom = Polygon(coords)
+            
+            # GeoDataFrame Asal (EPSG:4390)
+            gdf = gpd.GeoDataFrame(geometry=[poly_geom], crs=f"EPSG:{epsg_code}")
+            
+            # Kira Luas Asal
+            area_sqm = gdf.geometry.area.iloc[0]
+            area_acre = area_sqm * 0.000247105 # Tukar ke Ekar jika perlu
+            
+            st.success(f"Luas Polygon: **{area_sqm:.3f} m²**")
 
-            # ---------- MAP SETTINGS ----------
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("Tetapan Peta")
-            epsg_code = st.sidebar.text_input("Kod EPSG Asal", value="4390")
-            show_satellite = st.sidebar.checkbox("Buka Layer Satelit (On / Off)", value=True)
-
-            zoom_margin = st.sidebar.slider(
-                "Zoom Keluar (Margin dalam Meter)",
-                min_value=0, max_value=500, value=50, step=10
+            # --- EKSPORT (Task 2) ---
+            st.subheader("📥 Eksport Data")
+            
+            # 1. GeoJSON
+            st.download_button(
+                "Muat Turun GeoJSON",
+                gdf.to_json(),
+                "polygon_data.geojson",
+                "application/json"
+            )
+            
+            # 2. Shapefile (ZIP)
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "x") as zf:
+                gdf.to_file("temp.shp")
+                for ext in ["shp", "shx", "dbf", "prj"]:
+                    if os.path.exists(f"temp.{ext}"):
+                        zf.write(f"temp.{ext}")
+                        os.remove(f"temp.{ext}")
+            
+            st.download_button(
+                "Muat Turun Shapefile (.zip)",
+                buf.getvalue(),
+                "polygon_shp.zip",
+                "application/zip"
             )
 
-            st.sidebar.markdown("---")
-            st.sidebar.subheader("Tetapan Label")
-            show_stn = st.sidebar.checkbox("Papar Label Stesen (STN)")
-            show_labels = st.sidebar.checkbox("Papar Bearing & Jarak")
-            show_area = st.sidebar.checkbox("Papar Label Luas")
+    with col_map:
+        st.subheader("🗺️ Visualisasi Peta")
+        
+        # --- REPROJECT KE 3857 UNTUK SATELIT (Task 3) ---
+        gdf_3857 = gdf.to_crs(epsg=3857)
+        poly_3857 = gdf_3857.geometry.iloc[0]
+        
+        fig, ax = plt.subplots(figsize=(10, 10))
+        
+        # Plot Polygon
+        fill_color = "none" if show_satellite else "lightblue"
+        gdf_3857.plot(ax=ax, edgecolor="red", facecolor=fill_color, linewidth=2, alpha=0.7, zorder=10)
 
-            # ---------- GEOMETRY PROCESSING ----------
-            coords = list(zip(df["E"], df["N"]))
-            polygon_orig = Polygon(coords)
-            
-            # Create GeoDataFrame in Original CRS
-            gdf = gpd.GeoDataFrame(geometry=[polygon_orig], crs=f"EPSG:{epsg_code}")
-            
-            # Simpan luas asal (sebelum reproject) untuk ketepatan
-            area_orig = gdf.geometry.area.iloc[0]
-            
-            # REPROJECT KE WEB MERCATOR UNTUK BASEMAP
-            gdf_3857 = gdf.to_crs(epsg=3857)
-            poly_3857 = gdf_3857.geometry.iloc[0]
-            centroid_3857 = poly_3857.centroid
+        # Overlay Satelit
+        if show_satellite:
+            try:
+                cx.add_basemap(ax, source=cx.providers.Esri.WorldImagery, crs=gdf_3857.crs.to_string())
+            except Exception as e:
+                st.error(f"Gagal memuatkan satelit: {e}")
 
-            # ---------- EXPORT ----------
-            st.subheader("Ekspot Data")
-            col1, col2 = st.columns(2)
-            col1.download_button("Download GeoJSON", gdf.to_json(), "polygon.geojson", "application/json")
+        # --- LABELING (Task 4) ---
+        pts_3857 = list(poly_3857.exterior.coords)
+        pts_orig = list(poly_geom.exterior.coords)
 
-            with col2:
-                zip_buffer = io.BytesIO()
-                with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-                    name = "polygon"
-                    gdf.to_file(f"{name}.shp")
-                    time.sleep(0.5)
-                    for ext in ["shp", "shx", "dbf", "prj"]:
-                        if os.path.exists(f"{name}.{ext}"):
-                            zip_file.write(f"{name}.{ext}")
-                st.download_button("Download Shapefile (.zip)", zip_buffer.getvalue(), "polygon_shapefile.zip", "application/zip")
+        # 1. Label Stesen
+        for i, p in enumerate(pts_3857[:-1]):
+            ax.scatter(p[0], p[1], color="yellow", s=40, zorder=20, edgecolor="black")
+            if show_stn:
+                ax.text(p[0], p[1], f"  STN {i+1}", color="white", fontsize=10, fontweight="bold", 
+                        zorder=25, path_effects=None)
 
-            # ---------- VISUALIZATION ----------
-            st.subheader("Visualisasi")
-            fig, ax = plt.subplots(figsize=(10, 10))
+        # 2. Label Bearing & Jarak
+        if show_labels:
+            for i in range(len(pts_orig) - 1):
+                p1_o, p2_o = pts_orig[i], pts_orig[i+1]
+                p1_m, p2_m = pts_3857[i], pts_3857[i+1]
+                
+                # Kira guna 4390 (Data sebenar)
+                dist = np.hypot(p2_o[0] - p1_o[0], p2_o[1] - p1_o[1])
+                bearing = format_to_dms(np.degrees(np.arctan2(p2_o[0] - p1_o[0], p2_o[1] - p1_o[1])) % 360)
+                
+                # Letak label di tengah garisan (koordinat 3857)
+                mx, my = (p1_m[0] + p2_m[0]) / 2, (p1_m[1] + p2_m[1]) / 2
+                ax.text(mx, my, f"{dist:.2f}m\n{bearing}", color="#00FF00", fontsize=8, 
+                        fontweight="bold", ha="center", zorder=30,
+                        bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', pad=1))
 
-            # Plot Polygon (Gunakan gdf_3857)
-            fill_color = "none" if show_satellite else "lightblue"
-            gdf_3857.plot(ax=ax, edgecolor="red", facecolor=fill_color, linewidth=2, alpha=0.7, zorder=10)
-
-            # Masukkan Basemap Satelit
-            if show_satellite:
-                try:
-                    # Pastikan crs dinyatakan supaya contextily tahu kita guna 3857
-                    cx.add_basemap(ax, source=cx.providers.Esri.WorldImagery, crs=gdf_3857.crs.to_string())
-                except Exception as e:
-                    st.warning(f"Layer satelit gagal: {e}")
-
-            # ---------- LABELS (Gunakan koordinat 3857) ----------
-            pts_3857 = list(poly_3857.exterior.coords)
-            pts_orig = list(polygon_orig.exterior.coords) # Untuk kira bearing/jarak sebenar
-
-            for i, p in enumerate(pts_3857[:-1]):
-                ax.scatter(p[0], p[1], color="yellow", s=30, zorder=20)
-                if show_stn:
-                    ax.text(p[0], p[1], f"  STN {i+1}", color="white", fontsize=9, fontweight="bold", zorder=25)
-
-            if show_labels:
-                for i in range(len(pts_orig) - 1):
-                    # Kira guna data asal (4390) supaya jarak/bearing tepat
-                    p1_o, p2_o = pts_orig[i], pts_orig[i + 1]
-                    dist = np.hypot(p2_o[0] - p1_o[0], p2_o[1] - p1_o[1])
-                    bearing = format_to_dms(np.degrees(np.arctan2(p2_o[0] - p1_o[0], p2_o[1] - p1_o[1])) % 360)
-                    
-                    # Letak label guna koordinat 3857 (lokasi tengah antara titik)
-                    p1_m, p2_m = pts_3857[i], pts_3857[i+1]
-                    mx, my = (p1_m[0] + p2_m[0]) / 2, (p1_m[1] + p2_m[1]) / 2
-                    ax.text(mx, my, f"{dist:.2f}m\n{bearing}", color="lime", 
-                            fontsize=8, fontweight="bold", ha="center", zorder=30,
-                            bbox=dict(facecolor='black', alpha=0.4, edgecolor='none'))
-
-            if show_area:
-                ax.text(centroid_3857.x, centroid_3857.y, f"LUAS\n{area_orig:.2f} m²",
+        # 3. Label Luas
+        if show_area:
+            centroid = poly_3857.centroid
+            ax.text(centroid.x, centroid.y, f"LUAS\n{area_sqm:.2f} m²", 
                     color="white", fontsize=12, fontweight="bold", ha="center", va="center", zorder=40,
-                    bbox=dict(facecolor="black", alpha=0.6, boxstyle="round"))
+                    bbox=dict(facecolor="red", alpha=0.6, boxstyle="round,pad=0.5"))
 
-            # ---------- EXTENT & LOOK ----------
-            bounds = gdf_3857.total_bounds
-            ax.set_xlim(bounds[0] - zoom_margin, bounds[2] + zoom_margin)
-            ax.set_ylim(bounds[1] - zoom_margin, bounds[3] + zoom_margin)
-            ax.set_axis_off() # Sembunyikan axis untuk rupa lebih bersih
-            
-            st.pyplot(fig)
+        # Kemaskan paparan axis
+        bounds = gdf_3857.total_bounds
+        ax.set_xlim(bounds[0] - zoom_margin, bounds[2] + zoom_margin)
+        ax.set_ylim(bounds[1] - zoom_margin, bounds[3] + zoom_margin)
+        ax.set_axis_off()
+        
+        st.pyplot(fig)
 
-        else:
-            st.error("Fail CSV mesti mengandungi lajur 'E' dan 'N'.")
+else:
+    # Paparan awal jika tiada fail
+    st.warning("Menunggu fail CSV dimuat naik...")
+    st.image("https://www.esri.com/about/newsroom/wp-content/uploads/2019/04/satellite-imagery.jpg", caption="Contoh Paparan WebGIS")
 
-elif user_password != "":
-    st.sidebar.error("Kata laluan salah. Sila cuba lagi.")
+# ================= FOOTER =================
+st.markdown("---")
+st.caption("Dibangunkan untuk Sistem Pengurusan Maklumat Tanah Malaysia | EPSG:4390 Kertau RSO Ready")
