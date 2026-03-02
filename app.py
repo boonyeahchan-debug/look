@@ -10,94 +10,101 @@ import os
 import contextily as cx
 
 # ================= 1. CONFIGURATION =================
-st.set_page_config(layout="wide", page_title="WebGIS Google Satellite")
+st.set_page_config(layout="wide", page_title="WebGIS Kertau 4390")
 
 # ================= 2. UTILITIES =================
 def format_to_dms(deg):
+    """Format decimal degrees to DMS for plan labeling."""
     d = int(deg)
     md = abs(deg - d) * 60
     m = int(md)
     sd = (md - m) * 60
     return f"{d}°{m:02d}'{sd:02.0f}\""
 
-# URL XYZ untuk Google Satellite
+# URL XYZ for Google Satellite
 GOOGLE_SATELLITE_URL = "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}"
 
 # ================= 3. SIDEBAR =================
 with st.sidebar:
-    st.header("⚙️ Tetapan Lapisan")
-    st.subheader("Google Maps Satellite")
-    show_labels = st.checkbox("Papar Bearing & Jarak", value=True)
-    show_area = st.checkbox("Papar Luas (4390)", value=True)
-    zoom_margin = st.slider("Margin Zoom (Meter)", 0, 1000, 100, 50)
+    st.header("⚙️ Map Settings")
+    st.info("Input & Calculations: EPSG:4390\nDisplay: Web Mercator (3857)")
+    
+    # Layer Controls
+    show_labels = st.checkbox("Show Bearing & Distance", value=True)
+    show_area = st.checkbox("Show Area Label", value=True)
     
     st.markdown("---")
-    st.info("Nota: Koordinat input mestilah dalam unit Meter (EPSG:4390 Kertau RSO).")
+    zoom_margin = st.slider("Zoom Margin (Meters)", 0, 1000, 200, 50)
 
 # ================= 4. MAIN INTERFACE =================
-st.title("🗺️ WebGIS: Google Satellite Layer (EPSG:4390)")
+st.title("🗺️ Polygon Plotting System (EPSG:4390)")
 
-uploaded_file = st.file_uploader("Upload CSV (Kolum E, N)", type=["csv"])
+uploaded_file = st.file_uploader("Upload CSV (E, N columns in meters)", type=["csv"])
 
 if uploaded_file:
     df = pd.read_csv(uploaded_file)
     
     if {"E", "N"}.issubset(df.columns):
-        # --- PROSES DATA (EPSG:4390) ---
+        # --- 1. ORIGINAL GEOMETRY (EPSG:4390) ---
         coords = list(zip(df["E"], df["N"]))
         poly_orig = Polygon(coords)
         gdf_4390 = gpd.GeoDataFrame(geometry=[poly_orig], crs="EPSG:4390")
         
-        # Kira Luas Sebenar
+        # Real Area Calculation (Kertau RSO)
         area_4390 = gdf_4390.geometry.area.iloc[0]
         
-        # --- REPROJECT UNTUK GOOGLE MAPS (EPSG:3857) ---
+        # --- 2. REPROJECTION FOR VISUALIZATION (EPSG:3857) ---
+        # Contextily satellite tiles require EPSG:3857 for correct alignment
         gdf_3857 = gdf_4390.to_crs(epsg=3857)
         poly_3857 = gdf_3857.geometry.iloc[0]
 
-        # --- PLOTTING ---
+        # --- 3. PLOTTING ---
         fig, ax = plt.subplots(figsize=(10, 10))
         
-        # Lukis Polygon
+        # Plot Polygon (Using visual 3857 coordinates)
         gdf_3857.plot(ax=ax, edgecolor="#FF0000", facecolor="none", linewidth=2.5, zorder=20)
 
-        # Tambah Google Satellite Menggunakan URL XYZ
+        # Add Google Satellite using XYZ URL with zoom adjustment to prevent 404s
         try:
-            cx.add_basemap(ax, source=GOOGLE_SATELLITE_URL, zoom='auto')
+            cx.add_basemap(ax, source=GOOGLE_SATELLITE_URL, zoom='auto', zoom_adjust=-2)
         except Exception as e:
-            st.error(f"Gagal memuatkan Google Satellite: {e}")
+            st.warning(f"Satellite map failed to load: {e}")
 
-        # --- LABELS (Value 4390, Kedudukan 3857) ---
+        # --- 4. LABELING (Hybrid Logic) ---
         pts_3857 = list(poly_3857.exterior.coords)
         pts_4390 = list(poly_orig.exterior.coords)
 
+        # Labels for Bearing & Distance (Value from 4390, Position on 3857)
         if show_labels:
             for i in range(len(pts_4390) - 1):
-                # Kira Jarak & Bearing (Kertau)
-                p1, p2 = pts_4390[i], pts_4390[i+1]
-                dist = np.hypot(p2[0]-p1[0], p2[1]-p1[1])
-                bearing = format_to_dms(np.degrees(np.arctan2(p2[0]-p1[0], p2[1]-p1[1])) % 360)
+                p1_43, p2_43 = pts_4390[i], pts_4390[i+1]
+                dist = np.hypot(p2_43[0] - p1_43[0], p2_43[1] - p1_43[1])
+                bearing = format_to_dms(np.degrees(np.arctan2(p2_43[0]-p1_43[0], p2_43[1]-p1_43[1])) % 360)
                 
-                # Plot pada posisi 3857
-                p1v, p2v = pts_3857[i], pts_3857[i+1]
-                mx, my = (p1v[0]+p2v[0])/2, (p1v[1]+p2v[1])/2
+                # Text location on map (3857)
+                p1_38, p2_38 = pts_3857[i], pts_3857[i+1]
+                mx, my = (p1_38[0]+p2_38[0])/2, (p1_38[1]+p2_38[1])/2
                 
                 ax.text(mx, my, f"{dist:.2f}m\n{bearing}", color="#FFFF00", fontsize=8, 
                         fontweight="bold", ha="center", va="center",
-                        bbox=dict(facecolor='black', alpha=0.5, edgecolor='none', pad=2))
+                        bbox=dict(facecolor='black', alpha=0.5, edgecolor='none'))
 
+        # Area Label
         if show_area:
-            c = poly_3857.centroid
-            ax.text(c.x, c.y, f"LUAS (4390)\n{area_4390:.2f} m²", color="white", 
-                    ha="center", va="center", fontweight="bold", fontsize=12,
-                    bbox=dict(facecolor="#FF0000", alpha=0.7, boxstyle="round,pad=0.5"))
+            centroid = poly_3857.centroid
+            ax.text(centroid.x, centroid.y, f"LUAS \n{area_4390:.2f} m²", 
+                    color="white", ha="center", fontweight="bold",
+                    bbox=dict(facecolor="#FF0000", alpha=0.7, boxstyle="round,pad=0.3"))
 
-        # Set Zoom Extent
+        # --- 5. EXTENT & DISPLAY ---
         bounds = gdf_3857.total_bounds
         ax.set_xlim(bounds[0] - zoom_margin, bounds[2] + zoom_margin)
         ax.set_ylim(bounds[1] - zoom_margin, bounds[3] + zoom_margin)
         ax.set_axis_off()
         
         st.pyplot(fig)
+        
+        # Export (Task 2)
+        st.download_button("Download GeoJSON (Kertau)", gdf_4390.to_json(), "lot_kertau.geojson")
     else:
-        st.error("Ralat: Fail CSV mesti mempunyai kolum 'E' dan 'N'.")
+        st.error("CSV file does not contain 'E' and 'N' columns.")
