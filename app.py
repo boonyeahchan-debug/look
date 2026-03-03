@@ -1,5 +1,5 @@
 import streamlit as st
-import pd as pd
+import pandas as pd
 import geopandas as gpd
 from shapely.geometry import Polygon, Point
 import folium
@@ -151,3 +151,4 @@ if uploaded_file:
         st_folium(m, width="100%", height=600)
 
         st.download_button("📥 Eksport GeoJSON", gdf_poly.to_json(), "data.geojson")
+
