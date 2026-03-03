@@ -6,6 +6,7 @@ import folium
 from streamlit_folium import st_folium
 import numpy as np
 import time
+import json # Tambahan untuk pemprosesan GeoJSON
 
 # ================= 1. KONFIGURASI & SESSION STATE =================
 st.set_page_config(layout="wide", page_title="Sistem WebGIS Tanah V2 - Final Edition")
@@ -67,6 +68,15 @@ with st.sidebar:
     
     show_sat = st.checkbox("Peta Satelit (Google)", value=True)
     st.markdown("---")
+    
+    # --- BAHAGIAN: TETAPAN WARNA & WIDTH ---
+    st.subheader("🎨 Tetapan Visual")
+    label_color = st.color_picker("Warna Teks (Bearing/Jarak)", "#FFFF00") 
+    line_color = st.color_picker("Warna Garisan Sempadan", "#FF0000") 
+    line_width = st.slider("Ketebalan Garisan", 1, 10, 4)
+    font_size = st.slider("Saiz Tulisan Label", 6, 16, 9)
+
+    st.markdown("---")
     st.info("🖱️ **Tips Interaktif:**\n1. Hover poligon untuk info luas.\n2. Klik stesen untuk koordinat.")
     show_line_labels = st.checkbox("Papar Bearing & Jarak", value=True)
     
@@ -88,12 +98,16 @@ if uploaded_file:
     
     if {"E", "N"}.issubset(df.columns):
         # --- Pemprosesan Data ---
-        pts = list(zip(df["E"], df["N"]))
-        polygon = Polygon(pts)
+        pts = [Point(x, y) for x, y in zip(df["E"], df["N"])]
+        polygon = Polygon([(p.x, p.y) for p in pts])
         luas, perimeter = polygon.area, polygon.length
         
         # Penukaran Projeksi (Asal -> WGS84 untuk Folium)
         gdf_poly = gpd.GeoDataFrame(index=[0], geometry=[polygon], crs=f"EPSG:{epsg_input}")
+        
+        # Tambah Points ke dalam GeoDataFrame untuk eksport
+        gdf_points = gpd.GeoDataFrame(df, geometry=pts, crs=f"EPSG:{epsg_input}")
+        
         gdf_4326 = gdf_poly.to_crs(epsg=4326)
         bounds = gdf_4326.total_bounds
         centroid_4326 = gdf_4326.geometry.centroid[0]
@@ -106,10 +120,10 @@ if uploaded_file:
         if show_sat:
             folium.TileLayer(tiles=TILE_GOOGLE, attr='Google', name='Satellite', max_zoom=22, max_native_zoom=20).add_to(m)
 
-        # 2. Lapisan Poligon (Hover Tooltip: Detail Pemilik & Luas)
+        # 2. Lapisan Poligon
         info_tooltip = f"""
             <div style='font-family: Arial; font-size: 11pt; padding: 5px; width: 180px;'>
-                <b style='color: red;'>MAKLUMAT TANAH</b><br>
+                <b style='color: {line_color};'>MAKLUMAT TANAH</b><br>
                 <b>Pemilik:</b> {st.session_state['current_user']}<br>
                 <b>Luas:</b> {luas:.2f} m²<br>
                 <b>Perimeter:</b> {perimeter:.2f} m
@@ -118,12 +132,16 @@ if uploaded_file:
         folium.GeoJson(
             gdf_4326,
             name="Sempadan Tanah",
-            style_function=lambda x: {'color':'red', 'weight':4, 'fillOpacity':0.2},
-            highlight_function=lambda x: {'weight':7, 'fillOpacity':0.4, 'color': 'yellow'},
+            style_function=lambda x: {
+                'color': line_color, 
+                'weight': line_width, 
+                'fillOpacity': 0.2
+            },
+            highlight_function=lambda x: {'weight': line_width + 3, 'fillOpacity': 0.4, 'color': 'white'},
             tooltip=folium.Tooltip(info_tooltip)
         ).add_to(m)
 
-        # 3. Lapisan Titik Stesen (Click Popup: Koordinat)
+        # 3. Lapisan Titik Stesen
         for i, row in df.iterrows():
             p_gdf = gpd.GeoDataFrame(index=[0], geometry=[Point(row['E'], row['N'])], crs=f"EPSG:{epsg_input}").to_crs(epsg=4326)
             lat, lon = p_gdf.geometry.iloc[0].y, p_gdf.geometry.iloc[0].x
@@ -140,20 +158,18 @@ if uploaded_file:
                 popup=folium.Popup(stn_popup, max_width=200)
             ).add_to(m)
 
-        # 4. Logic: Bearing & Jarak dengan Auto-Rotation
+        # 4. Logic: Bearing & Jarak
         if show_line_labels:
-            points = list(polygon.exterior.coords)
-            for i in range(len(points) - 1):
-                p1, p2 = points[i], points[i+1]
+            points_list = list(polygon.exterior.coords)
+            for i in range(len(points_list) - 1):
+                p1, p2 = points_list[i], points_list[i+1]
                 p1_4, p2_4 = coords_4326[i], coords_4326[i+1]
                 
-                # Pengiraan Jarak & Bearing
                 dist = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
                 dx, dy = p2[0] - p1[0], p2[1] - p1[1]
                 bearing_deg = np.degrees(np.arctan2(dx, dy)) % 360
                 line_angle_deg = np.degrees(np.arctan2(dy, dx))
                 
-                # Laraskan sudut supaya teks selari dan tidak terbalik
                 rotation = -line_angle_deg 
                 if 90 < abs(line_angle_deg) <= 270:
                     rotation += 180
@@ -161,22 +177,34 @@ if uploaded_file:
                 mid_lat, mid_lon = (p1_4[1] + p2_4[1]) / 2, (p1_4[0] + p2_4[0]) / 2
                 
                 rotated_html = f"""
-                    <div style="transform: rotate({rotation}deg); white-space: nowrap; font-size: 9pt; 
-                                color: yellow; font-weight: bold; text-shadow: 2px 2px 2px black; 
+                    <div style="transform: rotate({rotation}deg); white-space: nowrap; 
+                                font-size: {font_size}pt; 
+                                color: {label_color}; font-weight: bold; 
+                                text-shadow: 2px 2px 2px black; 
                                 text-align: center; width: 110px;">
                         {dist:.2f}m<br>{format_to_dms(bearing_deg)}
                     </div>"""
                 folium.Marker([mid_lat, mid_lon], icon=folium.DivIcon(html=rotated_html, icon_anchor=(55,15))).add_to(m)
 
-        # 5. Render Peta & Fit Bounds
+        # 5. Render Peta
         m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]], padding=(zoom_margin, zoom_margin))
         st_folium(m, width="100%", height=750)
 
-        # 6. Analisis & Eksport
+        # 6. Analisis & Eksport (DIKEMAS KINI UNTUK VERTICES)
         st.markdown("---")
+        
+        # Gabungkan Poligon dan Titik ke dalam satu GeoJSON
+        combined_gdf = pd.concat([gdf_poly, gdf_points], ignore_index=True)
+        geojson_data = combined_gdf.to_json()
+
         col_a, col_b = st.columns(2)
         col_a.metric("Luas (Ekar)", f"{luas/4046.86:.3f} ekar")
-        col_b.download_button("📥 Muat Turun GeoJSON", gdf_poly.to_json(), "pelan_akhir.geojson")
+        col_b.download_button(
+            label="📥 Muat Turun GeoJSON (Poligon + Titik)",
+            data=geojson_data,
+            file_name="pelan_tanah_lengkap.geojson",
+            mime="application/json"
+        )
 
     else:
         st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' dan 'N'.")
