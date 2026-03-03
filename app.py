@@ -8,7 +8,7 @@ import numpy as np
 import time
 
 # ================= 1. KONFIGURASI & SESSION STATE =================
-st.set_page_config(layout="wide", page_title="Sistem WebGIS Tanah V2 - Ultimate Combine")
+st.set_page_config(layout="wide", page_title="Sistem WebGIS Tanah V2 - Final Edition")
 
 TILE_GOOGLE = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
 
@@ -63,14 +63,12 @@ if not st.session_state['auth']:
 # ================= 4. INTERFACE KAWALAN SIDEBAR =================
 with st.sidebar:
     st.success(f"Log Masuk: {st.session_state['current_user']} ✨")
-    st.header("🎮 Kawalan Lapisan (On/Off)")
+    st.header("🎮 Kawalan Lapisan")
     
-    show_sat = st.checkbox("Peta Satelit (Google)", value=False)
+    show_sat = st.checkbox("Peta Satelit (Google)", value=True)
     st.markdown("---")
-    show_pts = st.checkbox("Point Stesen (Markers)", value=True)
-    show_coords = st.checkbox("Label Koordinat (E, N)", value=True)
-    show_line_labels = st.checkbox("Label Bearing & Jarak (Auto-Rotate)", value=True)
-    show_area_info = st.checkbox("Detail (Pemilik & Luas)", value=True)
+    st.info("🖱️ **Tips Interaktif:**\n1. Hover poligon untuk info luas.\n2. Klik stesen untuk koordinat.")
+    show_line_labels = st.checkbox("Papar Bearing & Jarak", value=True)
     
     st.markdown("---")
     epsg_input = st.text_input("Sistem Koordinat (EPSG)", value="4390")
@@ -89,11 +87,10 @@ if uploaded_file:
     df = pd.read_csv(uploaded_file)
     
     if {"E", "N"}.issubset(df.columns):
-        # --- Pemprosesan Data Asal ---
+        # --- Pemprosesan Data ---
         pts = list(zip(df["E"], df["N"]))
         polygon = Polygon(pts)
-        luas = polygon.area
-        perimeter = polygon.length
+        luas, perimeter = polygon.area, polygon.length
         
         # Penukaran Projeksi (Asal -> WGS84 untuk Folium)
         gdf_poly = gpd.GeoDataFrame(index=[0], geometry=[polygon], crs=f"EPSG:{epsg_input}")
@@ -102,46 +99,58 @@ if uploaded_file:
         centroid_4326 = gdf_4326.geometry.centroid[0]
         coords_4326 = list(gdf_4326.geometry.exterior[0].coords)
 
-        # Inisialisasi Peta
+        # Inisialisasi Peta Folium
         m = folium.Map(location=[centroid_4326.y, centroid_4326.x], zoom_start=18, control_scale=True, max_zoom=22)
 
         # 1. Lapisan Satelit
         if show_sat:
             folium.TileLayer(tiles=TILE_GOOGLE, attr='Google', name='Satellite', max_zoom=22, max_native_zoom=20).add_to(m)
 
-        # 2. Lapisan Pelan Teknikal (Boundary Merah)
-        folium.GeoJson(gdf_4326, name="Sempadan Tanah", style_function=lambda x: {'color':'red', 'weight':4, 'fillOpacity':0.1}).add_to(m)
+        # 2. Lapisan Poligon (Hover Tooltip: Detail Pemilik & Luas)
+        info_tooltip = f"""
+            <div style='font-family: Arial; font-size: 11pt; padding: 5px; width: 180px;'>
+                <b style='color: red;'>MAKLUMAT TANAH</b><br>
+                <b>Pemilik:</b> {st.session_state['current_user']}<br>
+                <b>Luas:</b> {luas:.2f} m²<br>
+                <b>Perimeter:</b> {perimeter:.2f} m
+            </div>
+        """
+        folium.GeoJson(
+            gdf_4326,
+            name="Sempadan Tanah",
+            style_function=lambda x: {'color':'red', 'weight':4, 'fillOpacity':0.2},
+            highlight_function=lambda x: {'weight':7, 'fillOpacity':0.4, 'color': 'yellow'},
+            tooltip=folium.Tooltip(info_tooltip)
+        ).add_to(m)
 
-        # 3. Lapisan Label Dinamik (Stesen & Koordinat)
+        # 3. Lapisan Titik Stesen (Click Popup: Koordinat)
         for i, row in df.iterrows():
             p_gdf = gpd.GeoDataFrame(index=[0], geometry=[Point(row['E'], row['N'])], crs=f"EPSG:{epsg_input}").to_crs(epsg=4326)
             lat, lon = p_gdf.geometry.iloc[0].y, p_gdf.geometry.iloc[0].x
             
-            if show_pts:
-                folium.CircleMarker([lat, lon], radius=5, color='white', fill=True, fill_color='black', weight=2).add_to(m)
-            
-            if show_coords:
-                label_stn = f"""<div style="font-size: 8pt; color: white; background: rgba(0,0,0,0.7); 
-                                padding: 3px; border-radius: 4px; width: 90px; border: 1px solid red;">
-                                <b>STN {i+1}</b><br>E: {row['E']:.2f}<br>N: {row['N']:.2f}</div>"""
-                folium.Marker([lat, lon], icon=folium.DivIcon(html=label_stn, icon_anchor=(-10, 10))).add_to(m)
+            stn_popup = f"""
+                <div style='font-family: Arial; font-size: 10pt; width: 130px;'>
+                    <b style='color: blue;'>STESEN {i+1}</b><hr style='margin:3px;'>
+                    <b>E:</b> {row['E']:.2f}<br>
+                    <b>N:</b> {row['N']:.2f}
+                </div>
+            """
+            folium.CircleMarker(
+                [lat, lon], radius=6, color='white', fill=True, fill_color='black', weight=2,
+                popup=folium.Popup(stn_popup, max_width=200)
+            ).add_to(m)
 
         # 4. Logic: Bearing & Jarak dengan Auto-Rotation
         if show_line_labels:
             points = list(polygon.exterior.coords)
             for i in range(len(points) - 1):
-                p1 = points[i] # Asal (E, N)
-                p2 = points[i+1]
-                p1_4, p2_4 = coords_4326[i], coords_4326[i+1] # WGS84
+                p1, p2 = points[i], points[i+1]
+                p1_4, p2_4 = coords_4326[i], coords_4326[i+1]
                 
                 # Pengiraan Jarak & Bearing
                 dist = np.sqrt((p2[0] - p1[0])**2 + (p2[1] - p1[1])**2)
-                angle_rad = np.arctan2(p2[0] - p1[0], p2[1] - p1[1])
-                bearing_deg = np.degrees(angle_rad) % 360
-                bearing_str = format_to_dms(bearing_deg)
-
-                # Pengiraan Rotation (CSS)
                 dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+                bearing_deg = np.degrees(np.arctan2(dx, dy)) % 360
                 line_angle_deg = np.degrees(np.arctan2(dy, dx))
                 
                 # Laraskan sudut supaya teks selari dan tidak terbalik
@@ -152,30 +161,22 @@ if uploaded_file:
                 mid_lat, mid_lon = (p1_4[1] + p2_4[1]) / 2, (p1_4[0] + p2_4[0]) / 2
                 
                 rotated_html = f"""
-                <div style="transform: rotate({rotation}deg); white-space: nowrap; font-size: 9pt; 
-                            color: yellow; font-weight: bold; text-shadow: 2px 2px 2px black; 
-                            text-align: center; width: 110px;">
-                    {dist:.2f}m<br>{bearing_str}
-                </div>"""
+                    <div style="transform: rotate({rotation}deg); white-space: nowrap; font-size: 9pt; 
+                                color: yellow; font-weight: bold; text-shadow: 2px 2px 2px black; 
+                                text-align: center; width: 110px;">
+                        {dist:.2f}m<br>{format_to_dms(bearing_deg)}
+                    </div>"""
                 folium.Marker([mid_lat, mid_lon], icon=folium.DivIcon(html=rotated_html, icon_anchor=(55,15))).add_to(m)
 
-        # 5. Info Poligon (Tengah)
-        if show_area_info:
-            info_html = f"""<div style="font-size: 10pt; color: white; background: #000; 
-                            padding: 10px; border-radius: 8px; border: 2px solid #FFD700; width: 200px; text-align: center;">
-                            <b style='color: #FFD700;'>PEMILIK: {st.session_state['current_user']}</b><hr style='margin:5px;'>
-                            LUAS: {luas:.2f} m²<br>PERIMETER: {perimeter:.2f} m</div>"""
-            folium.Marker([centroid_4326.y, centroid_4326.x], icon=folium.DivIcon(html=info_html, icon_anchor=(100,40))).add_to(m)
-
-        # Final Render
+        # 5. Render Peta & Fit Bounds
         m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]], padding=(zoom_margin, zoom_margin))
         st_folium(m, width="100%", height=750)
 
-        # Eksport & Ringkasan
+        # 6. Analisis & Eksport
         st.markdown("---")
         col_a, col_b = st.columns(2)
         col_a.metric("Luas (Ekar)", f"{luas/4046.86:.3f} ekar")
-        col_b.download_button("Download GeoJSON", gdf_poly.to_json(), "pelan_muktamad.geojson")
+        col_b.download_button("📥 Muat Turun GeoJSON", gdf_poly.to_json(), "pelan_akhir.geojson")
 
     else:
         st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' dan 'N'.")
