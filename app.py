@@ -7,6 +7,7 @@ from streamlit_folium import st_folium
 import numpy as np
 from PIL import Image
 import time
+import matplotlib.pyplot as plt
 
 # ================= 1. KONFIGURASI & SESSION STATE =================
 TILE_GOOGLE = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
@@ -88,6 +89,7 @@ with st.sidebar:
     show_poly = st.checkbox("Papar Sempadan Poligon", value=True)
 
 # ================= 4. PEMPROSESAN DATA & PETA =================
+st.title("🗺️ Visualisasi Poligon & Point Stesen")
 uploaded_file = st.file_uploader("Muat naik CSV (Kolum: E, N)", type=["csv"])
 
 if uploaded_file:
@@ -98,17 +100,21 @@ if uploaded_file:
         coords = list(zip(df["E"], df["N"]))
         poly_geom = Polygon(coords)
         
-        # GDF untuk pengiraan luas (Sistem asal)
+        # GDF Utama (Original CRS)
         gdf_poly = gpd.GeoDataFrame(index=[0], geometry=[poly_geom], crs=f"EPSG:{epsg_input}")
-        # GDF untuk paparan peta (WGS84)
+        # GDF untuk Folium (WGS84)
         gdf_poly_4326 = gdf_poly.to_crs(epsg=4326)
 
-        # --- Paparan Metrik (Bahagian yang ditambah) ---
+        # --- Paparan Metrik ---
         area_val = gdf_poly.geometry.area[0]
         m1, m2, m3 = st.columns(3)
         m1.metric("Luas Tanah", f"{area_val:.2f} m²")
         m2.metric("Bilangan Point", len(df))
         m3.metric("Sistem Koordinat", f"EPSG:{epsg_input}")
+
+        # --- Paparan Data Jadual ---
+        with st.expander("Lihat Data Mentah"):
+            st.dataframe(df, use_container_width=True)
 
         # --- Bina Peta Leaflet (Folium) ---
         m = folium.Map(max_zoom=22, min_zoom=1, control_scale=True, tiles=None)
@@ -129,35 +135,45 @@ if uploaded_file:
                 p_gdf = gpd.GeoDataFrame(index=[0], geometry=[Point(row['E'], row['N'])], crs=f"EPSG:{epsg_input}").to_crs(epsg=4326)
                 lat, lon = float(p_gdf.geometry.iloc[0].y), float(p_gdf.geometry.iloc[0].x)
                 
-                pop_html = f"""
-                <div style='font-family: Arial; width: 150px;'>
-                    <b>STN {idx+1}</b><hr>
-                    E: {row['E']:.3f}<br>N: {row['N']:.3f}<br>
-                    Lat: {lat:.7f}<br>Lon: {lon:.7f}
-                </div>"""
-                
                 folium.CircleMarker(
                     [lat, lon], radius=6, color='white', fill_color='red', fill=True, weight=2,
-                    popup=folium.Popup(pop_html, max_width=250)
+                    popup=f"STN {idx+1}: {row['E']}, {row['N']}"
                 ).add_to(m)
                 folium.Marker(
                     [lat, lon], 
                     icon=folium.DivIcon(html=f'<div style="color:yellow; font-weight:bold; text-shadow:1px 1px black; width:100px;">STN {idx+1}</div>')
                 ).add_to(m)
 
-        # Pelaksanaan Zoom Margin
+        # Auto-Zoom
         bounds = gdf_poly_4326.total_bounds
         m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]], padding=(zoom_margin, zoom_margin))
-
+        
+        st.subheader("Interactive WebGIS Map")
         st_folium(m, width="100%", height=600, returned_objects=[])
+
+        # --- Rajah Skematik (Matplotlib) ---
+        st.markdown("---")
+        st.subheader("📈 Rajah Skematik Poligon (Matplotlib)")
+        fig, ax = plt.subplots(figsize=(8, 6))
+        gdf_poly.plot(ax=ax, edgecolor="blue", facecolor="lightblue", alpha=0.5)
+        
+        # Plot point stesen dalam matplotlib
+        ax.scatter(df["E"], df["N"], color="red", s=20)
+        for i, txt in enumerate(range(1, len(df)+1)):
+            ax.annotate(f"STN {txt}", (df["E"].iloc[i], df["N"].iloc[i]), fontsize=8)
+
+        ax.set_title("Polygon Plot (Koordinat E, N)")
+        ax.set_xlabel("Easting (m)")
+        ax.set_ylabel("Northing (m)")
+        st.pyplot(fig)
 
         # --- Eksport Data ---
         st.markdown("---")
         col_ex1, col_ex2 = st.columns(2)
         with col_ex1:
-            st.download_button("Eksport GeoJSON", gdf_poly.to_json(), "data_tanah.geojson")
+            st.download_button("📥 Eksport GeoJSON", gdf_poly.to_json(), "data_tanah.geojson")
         with col_ex2:
             csv_out = df.to_csv(index=False).encode('utf-8')
-            st.download_button("Eksport CSV Koordinat", csv_out, "senarai_koordinat.csv")
+            st.download_button("📥 Eksport CSV", csv_out, "senarai_koordinat.csv")
     else:
         st.error("Ralat: Fail CSV tidak mempunyai lajur 'E' dan 'N'.")
