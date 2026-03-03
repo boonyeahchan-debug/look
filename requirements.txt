@@ -2,7 +2,7 @@ streamlit
 pandas
 geopandas
 shapely
-matplotlib
-contextily
+folium
+streamlit-folium
 numpy
-pyogrio
+Pillow
