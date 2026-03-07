@@ -13,15 +13,17 @@ st.set_page_config(layout="wide", page_title="Sistem WebGIS Tanah V2 - Final Edi
 
 TILE_GOOGLE = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
 
-# Database Pemilik Sah
+# Database Pemilik Sah (ID sebagai Key)
 USER_DATABASE = {
-    1: "Chan Boon Yeah",
-    2: "Wong Yuean Yi",
-    3: "Ooi Sue Ann"
+    "USER01": "Chan Boon Yeah",
+    "USER02": "Wong Yuean Yi",
+    "USER03": "Ooi Sue Ann"
 }
 
 if 'auth' not in st.session_state: st.session_state['auth'] = False
-if 'master_password' not in st.session_state: st.session_state['master_password'] = "admin123"
+if 'passwords' not in st.session_state: 
+    # Simpan kata laluan dalam dict supaya setiap ID boleh ada password sendiri
+    st.session_state['passwords'] = {k: "admin123" for k in USER_DATABASE.keys()}
 if 'reset_mode' not in st.session_state: st.session_state['reset_mode'] = False
 
 # ================= 2. FUNGSI TEKNIKAL & GEOMETRI =================
@@ -38,27 +40,45 @@ if not st.session_state['auth']:
     _, col_mid, _ = st.columns([1, 1.5, 1])
     with col_mid:
         st.title("🏛️ SISTEM MAKLUMAT TANAH")
+        
         if st.session_state['reset_mode']:
             st.subheader("🔑 Reset Kata Laluan")
-            reg_no = st.number_input("Nombor Pendaftaran", min_value=1, step=1)
+            # Input ID Sendiri untuk Reset
+            reset_id = st.text_input("Masukkan ID Anda untuk Pengesahan")
             new_pwd = st.text_input("Kata Laluan Baru", type="password")
+            
             if st.button("Sahkan Reset"):
-                if reg_no in USER_DATABASE:
-                    st.session_state['master_password'] = new_pwd
+                if reset_id in USER_DATABASE:
+                    # Tukar password spesifik untuk ID tersebut
+                    st.session_state['passwords'][reset_id] = new_pwd
+                    st.success(f"Kata laluan untuk {reset_id} berjaya ditukar!")
+                    time.sleep(1)
                     st.session_state['reset_mode'] = False
-                    st.success("Berjaya!"); time.sleep(1); st.rerun()
-            if st.button("Batal"): st.session_state['reset_mode'] = False; st.rerun()
+                    st.rerun()
+                else:
+                    st.error("ID tidak dijumpai dalam sistem!")
+            
+            if st.button("Batal"): 
+                st.session_state['reset_mode'] = False
+                st.rerun()
+        
         else:
-            u_no = st.number_input("Nombor Pendaftaran", min_value=1, step=1)
+            # Input ID Sendiri untuk Login
+            u_id = st.text_input("Masukkan ID Pengguna (Contoh: USER01)")
             p_in = st.text_input("Kata Laluan", type="password")
+            
             if st.button("Masuk", use_container_width=True):
-                if p_in == st.session_state['master_password'] and u_no in USER_DATABASE:
+                # Semak ID dan Password yang sepadan
+                if u_id in USER_DATABASE and p_in == st.session_state['passwords'].get(u_id):
                     st.session_state['auth'] = True
-                    st.session_state['current_user'] = USER_DATABASE[u_no]
+                    st.session_state['current_user'] = USER_DATABASE[u_id]
                     st.rerun()
                 else:
                     st.error("ID atau Kata Laluan Salah!")
-            if st.button("Lupa Kata Laluan?"): st.session_state['reset_mode'] = True; st.rerun()
+            
+            if st.button("Lupa Kata Laluan?"): 
+                st.session_state['reset_mode'] = True
+                st.rerun()
     st.stop()
 
 # ================= 4. INTERFACE KAWALAN SIDEBAR =================
@@ -190,10 +210,9 @@ if uploaded_file:
         m.fit_bounds([[bounds[1], bounds[0]], [bounds[3], bounds[2]]], padding=(zoom_margin, zoom_margin))
         st_folium(m, width="100%", height=750)
 
-        # 6. Analisis & Eksport (DIKEMAS KINI UNTUK VERTICES)
+        # 6. Analisis & Eksport
         st.markdown("---")
         
-        # Gabungkan Poligon dan Titik ke dalam satu GeoJSON
         combined_gdf = pd.concat([gdf_poly, gdf_points], ignore_index=True)
         geojson_data = combined_gdf.to_json()
 
