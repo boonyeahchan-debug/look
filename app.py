@@ -10,7 +10,7 @@ import json
 
 # ================= 0. GITHUB FILE CONFIGURATION =================
 # REPLACEMENT: Change this URL to your Raw GitHub PNG link
-GITHUB_LOGO_URL = "https://github.com/boonyeahchan-debug/look/blob/main/logo.png"
+GITHUB_LOGO_URL = "https://github.com/boonyeahchan-debug/look/blob/main/logo.png?raw=true"
 
 # ================= 1. KONFIGURASI & SESSION STATE =================
 st.set_page_config(layout="wide", page_title="Sistem WebGIS Tanah V2 - Final Edition")
@@ -224,4 +224,5 @@ if uploaded_file:
 
     else:
         st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' dan 'N'.")
+
 
