@@ -9,7 +9,6 @@ import time
 import json 
 
 # ================= 0. GITHUB FILE CONFIGURATION =================
-# REPLACEMENT: Change this URL to your Raw GitHub PNG link
 GITHUB_LOGO_URL = "https://github.com/boonyeahchan-debug/look/blob/main/logo.png?raw=true"
 
 # ================= 1. KONFIGURASI & SESSION STATE =================
@@ -17,7 +16,6 @@ st.set_page_config(layout="wide", page_title="Sistem WebGIS Tanah V2 - Final Edi
 
 TILE_GOOGLE = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
 
-# Database Pemilik Sah (ID sebagai Key)
 USER_DATABASE = {
     "USER01": "Chan Boon Yeah",
     "USER02": "Wong Yuean Yi",
@@ -42,7 +40,6 @@ def format_to_dms(deg):
 if not st.session_state['auth']:
     _, col_mid, _ = st.columns([1, 1.5, 1])
     with col_mid:
-        # UPDATED: Using GitHub PNG for Login Logo
         st.image(GITHUB_LOGO_URL, width=150)
         st.caption("POLITEKNIK UNGKU OMAR / JABATAN KEJURUTERAAN AWAM")
         
@@ -86,7 +83,6 @@ if not st.session_state['auth']:
 
 # ================= 4. INTERFACE KAWALAN SIDEBAR =================
 with st.sidebar:
-    # UPDATED: Using GitHub PNG for Sidebar Logo
     st.image(GITHUB_LOGO_URL, width=100)
     st.markdown("**POLITEKNIK UNGKU OMAR**")
     st.markdown("*JABATAN KEJURUTERAAN AWAM*")
@@ -96,6 +92,10 @@ with st.sidebar:
     st.header("🎮 Kawalan Lapisan")
     
     show_sat = st.checkbox("Peta Satelit (Google)", value=True)
+    # --- KOD BARU: Checkbox ON/OFF Point Stesen ---
+    show_points = st.checkbox("Papar Point Stesen", value=True)
+    show_line_labels = st.checkbox("Papar Bearing & Jarak", value=True)
+    # ----------------------------------------------
     st.markdown("---")
     
     st.subheader("🎨 Tetapan Visual")
@@ -106,7 +106,6 @@ with st.sidebar:
 
     st.markdown("---")
     st.info("🖱️ **Tips Interaktif:**\n1. Hover poligon untuk info luas.\n2. Klik stesen untuk koordinat.")
-    show_line_labels = st.checkbox("Papar Bearing & Jarak", value=True)
     
     st.markdown("---")
     epsg_input = st.text_input("Sistem Koordinat (EPSG)", value="4390")
@@ -162,21 +161,24 @@ if uploaded_file:
             tooltip=folium.Tooltip(info_tooltip)
         ).add_to(m)
 
-        for i, row in df.iterrows():
-            p_gdf = gpd.GeoDataFrame(index=[0], geometry=[Point(row['E'], row['N'])], crs=f"EPSG:{epsg_input}").to_crs(epsg=4326)
-            lat, lon = p_gdf.geometry.iloc[0].y, p_gdf.geometry.iloc[0].x
-            
-            stn_popup = f"""
-                <div style='font-family: Arial; font-size: 10pt; width: 130px;'>
-                    <b style='color: blue;'>STESEN {i+1}</b><hr style='margin:3px;'>
-                    <b>E:</b> {row['E']:.2f}<br>
-                    <b>N:</b> {row['N']:.2f}
-                </div>
-            """
-            folium.CircleMarker(
-                [lat, lon], radius=6, color='white', fill=True, fill_color='black', weight=2,
-                popup=folium.Popup(stn_popup, max_width=200)
-            ).add_to(m)
+        # --- KOD DIKEMASKINI: Logik Paparan Point Stesen ---
+        if show_points:
+            for i, row in df.iterrows():
+                p_gdf = gpd.GeoDataFrame(index=[0], geometry=[Point(row['E'], row['N'])], crs=f"EPSG:{epsg_input}").to_crs(epsg=4326)
+                lat, lon = p_gdf.geometry.iloc[0].y, p_gdf.geometry.iloc[0].x
+                
+                stn_popup = f"""
+                    <div style='font-family: Arial; font-size: 10pt; width: 130px;'>
+                        <b style='color: blue;'>STESEN {i+1}</b><hr style='margin:3px;'>
+                        <b>E:</b> {row['E']:.2f}<br>
+                        <b>N:</b> {row['N']:.2f}
+                    </div>
+                """
+                folium.CircleMarker(
+                    [lat, lon], radius=6, color='white', fill=True, fill_color='black', weight=2,
+                    popup=folium.Popup(stn_popup, max_width=200)
+                ).add_to(m)
+        # --------------------------------------------------
 
         if show_line_labels:
             points_list = list(polygon.exterior.coords)
@@ -224,5 +226,3 @@ if uploaded_file:
 
     else:
         st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' dan 'N'.")
-
-
