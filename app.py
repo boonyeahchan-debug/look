@@ -39,6 +39,10 @@ def format_to_dms(deg):
 if not st.session_state['auth']:
     _, col_mid, _ = st.columns([1, 1.5, 1])
     with col_mid:
+        # Menambah Logo dan Label pada Halaman Login
+        st.image("https://upload.wikimedia.org/wikipedia/commons/b/be/Logo_Politeknik_Malaysia.png", width=100)
+        st.caption("POLITEKNIK UNGKU OMAR / JABATAN KEJURUTERAAN AWAM")
+        
         st.title("🏛️ SISTEM MAKLUMAT TANAH")
         
         if st.session_state['reset_mode']:
@@ -83,6 +87,12 @@ if not st.session_state['auth']:
 
 # ================= 4. INTERFACE KAWALAN SIDEBAR =================
 with st.sidebar:
+    # --- TAMBAHAN LOGO & LABEL SUBTOPIK ---
+    st.image("https://upload.wikimedia.org/wikipedia/commons/b/be/Logo_Politeknik_Malaysia.png", width=80)
+    st.markdown("**POLITEKNIK UNGKU OMAR**")
+    st.markdown("*JABATAN KEJURUTERAAN AWAM*")
+    st.markdown("---")
+    
     st.success(f"Log Masuk: {st.session_state['current_user']} ✨")
     st.header("🎮 Kawalan Lapisan")
     
