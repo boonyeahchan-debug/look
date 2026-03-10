@@ -40,7 +40,8 @@ def format_to_dms(deg):
 if not st.session_state['auth']:
     _, col_mid, _ = st.columns([1, 1.5, 1])
     with col_mid:
-        st.image(GITHUB_LOGO_URL, width=150)
+        # SAIZ LOGO DIUBAH KE 250 (BESAR SIKIT)
+        st.image(GITHUB_LOGO_URL, width=250)
         st.caption("POLITEKNIK UNGKU OMAR / JABATAN KEJURUTERAAN AWAM")
         
         st.title("🏛️ SISTEM MAKLUMAT TANAH")
@@ -83,7 +84,8 @@ if not st.session_state['auth']:
 
 # ================= 4. INTERFACE KAWALAN SIDEBAR =================
 with st.sidebar:
-    st.image(GITHUB_LOGO_URL, width=100)
+    # SAIZ LOGO DIUBAH KE 180 (BESAR SIKIT)
+    st.image(GITHUB_LOGO_URL, width=180)
     st.markdown("**POLITEKNIK UNGKU OMAR**")
     st.markdown("*JABATAN KEJURUTERAAN AWAM*")
     st.markdown("---")
@@ -92,10 +94,8 @@ with st.sidebar:
     st.header("🎮 Kawalan Lapisan")
     
     show_sat = st.checkbox("Peta Satelit (Google)", value=True)
-    # --- KOD BARU: Checkbox ON/OFF Point Stesen ---
     show_points = st.checkbox("Papar Point Stesen", value=True)
     show_line_labels = st.checkbox("Papar Bearing & Jarak", value=True)
-    # ----------------------------------------------
     st.markdown("---")
     
     st.subheader("🎨 Tetapan Visual")
@@ -161,7 +161,6 @@ if uploaded_file:
             tooltip=folium.Tooltip(info_tooltip)
         ).add_to(m)
 
-        # --- KOD DIKEMASKINI: Logik Paparan Point Stesen ---
         if show_points:
             for i, row in df.iterrows():
                 p_gdf = gpd.GeoDataFrame(index=[0], geometry=[Point(row['E'], row['N'])], crs=f"EPSG:{epsg_input}").to_crs(epsg=4326)
@@ -178,7 +177,6 @@ if uploaded_file:
                     [lat, lon], radius=6, color='white', fill=True, fill_color='black', weight=2,
                     popup=folium.Popup(stn_popup, max_width=200)
                 ).add_to(m)
-        # --------------------------------------------------
 
         if show_line_labels:
             points_list = list(polygon.exterior.coords)
@@ -225,4 +223,4 @@ if uploaded_file:
         )
 
     else:
-        st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' dan 'N'.")
+        st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' and 'N'.")
