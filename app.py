@@ -27,12 +27,12 @@ st.markdown("""
     
     /* Melaraskan saiz teks label di sidebar (selepas login) */
     .sidebar-label {
-        font-size: 14px !important; /* Saiz teks label sidebar yang dicadangkan */
+        font-size: 12px !important; /* Saiz teks label sidebar yang dicadangkan */
         font-weight: bold;
         text-align: center;
     }
     .sidebar-sublabel {
-        font-size: 12px !important;
+        font-size: 10px !important;
         font-style: italic;
         text-align: center;
     }
@@ -262,3 +262,4 @@ if uploaded_file:
 
     else:
         st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' and 'N'.")
+
