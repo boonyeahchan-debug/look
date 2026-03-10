@@ -32,7 +32,7 @@ st.markdown("""
         text-align: center;
     }
     .sidebar-sublabel {
-        font-size: 10px !important;
+        font-size: 12px !important;
         font-style: italic;
         text-align: center;
     }
@@ -128,7 +128,7 @@ with st.sidebar:
     st.markdown('<p class="sidebar-sublabel">JABATAN KEJURUTERAAN AWAM</p>', unsafe_allow_html=True)
     st.markdown("---")
     
-    st.success(f"Log Masuk: {st.session_state['current_user']} ✨")
+    st.success(f"Welcome back,{st.session_state['current_user']} ✨")
     st.header("🎮 Kawalan Lapisan")
     
     show_sat = st.checkbox("Peta Satelit (Google)", value=True)
@@ -262,4 +262,5 @@ if uploaded_file:
 
     else:
         st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' and 'N'.")
+
 
