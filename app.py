@@ -14,6 +14,31 @@ GITHUB_LOGO_URL = "https://github.com/boonyeahchan-debug/look/blob/main/logo.png
 # ================= 1. KONFIGURASI & SESSION STATE =================
 st.set_page_config(layout="wide", page_title="Sistem WebGIS Tanah V2 - Final Edition")
 
+# CSS Tambahan untuk menyusun elemen ke tengah dan melaraskan saiz teks
+st.markdown("""
+<style>
+    /* Menyusun kandungan col_mid ke tengah (untuk halaman login) */
+    [data-testid="stColumn"] > div {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+    }
+    
+    /* Melaraskan saiz teks label di sidebar (selepas login) */
+    .sidebar-label {
+        font-size: 14px !important; /* Saiz teks label sidebar yang dicadangkan */
+        font-weight: bold;
+        text-align: center;
+    }
+    .sidebar-sublabel {
+        font-size: 12px !important;
+        font-style: italic;
+        text-align: center;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 TILE_GOOGLE = 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}'
 
 USER_DATABASE = {
@@ -38,11 +63,16 @@ def format_to_dms(deg):
 
 # ================= 3. SISTEM KESELAMATAN (LOGIN) =================
 if not st.session_state['auth']:
-    _, col_mid, _ = st.columns([1, 1.5, 1])
+    # Menggunakan columns untuk meletakkan kandungan di tengah halaman
+    _, col_mid, _ = st.columns([1, 2, 1]) # Melebarkan sedikit column tengah
     with col_mid:
-        # SAIZ LOGO DIUBAH KE 250 (BESAR SIKIT)
-        st.image(GITHUB_LOGO_URL, width=250)
-        st.caption("POLITEKNIK UNGKU OMAR / JABATAN KEJURUTERAAN AWAM")
+        # --- PERUBAHAN: Logo dibesarkan (width=350) dan disusun ke tengah oleh CSS ---
+        st.image(GITHUB_LOGO_URL, width=350)
+        
+        # --- PERUBAHAN: Label dibesarkan menggunakan HTML h3/h4 agar lebih jelas sebelum login ---
+        st.markdown("<h3>POLITEKNIK UNGKU OMAR</h3>", unsafe_allow_html=True)
+        st.markdown("<h4>JABATAN KEJURUTERAAN AWAM</h4>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True) # Jarak tambahan
         
         st.title("🏛️ SISTEM MAKLUMAT TANAH")
         
@@ -69,13 +99,16 @@ if not st.session_state['auth']:
             u_id = st.text_input("Masukkan ID Pengguna (Contoh: USER01)")
             p_in = st.text_input("Kata Laluan", type="password")
             
-            if st.button("Masuk", use_container_width=True):
-                if u_id in USER_DATABASE and p_in == st.session_state['passwords'].get(u_id):
-                    st.session_state['auth'] = True
-                    st.session_state['current_user'] = USER_DATABASE[u_id]
-                    st.rerun()
-                else:
-                    st.error("ID atau Kata Laluan Salah!")
+            # Container untuk butang log masuk agar kemas di tengah
+            button_container = st.container()
+            with button_container:
+                if st.button("Masuk", use_container_width=True):
+                    if u_id in USER_DATABASE and p_in == st.session_state['passwords'].get(u_id):
+                        st.session_state['auth'] = True
+                        st.session_state['current_user'] = USER_DATABASE[u_id]
+                        st.rerun()
+                    else:
+                        st.error("ID atau Kata Laluan Salah!")
             
             if st.button("Lupa Kata Laluan?"): 
                 st.session_state['reset_mode'] = True
@@ -84,10 +117,15 @@ if not st.session_state['auth']:
 
 # ================= 4. INTERFACE KAWALAN SIDEBAR =================
 with st.sidebar:
-    # SAIZ LOGO DIUBAH KE 180 (BESAR SIKIT)
-    st.image(GITHUB_LOGO_URL, width=180)
-    st.markdown("**POLITEKNIK UNGKU OMAR**")
-    st.markdown("*JABATAN KEJURUTERAAN AWAM*")
+    # Menggunakan columns di dalam sidebar untuk menengahkan logo
+    col1, col2, col3 = st.columns([1, 3, 1])
+    with col2:
+        # --- PERUBAHAN: Logo di sidebar dilaraskan (width=150) agar tidak terlalu besar di ruang sempit ---
+        st.image(GITHUB_LOGO_URL, width=150)
+        
+    # --- PERUBAHAN: Menggunakan kelas CSS untuk melaraskan saiz teks label di sidebar ---
+    st.markdown('<p class="sidebar-label">POLITEKNIK UNGKU OMAR</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sidebar-sublabel">JABATAN KEJURUTERAAN AWAM</p>', unsafe_allow_html=True)
     st.markdown("---")
     
     st.success(f"Log Masuk: {st.session_state['current_user']} ✨")
