@@ -25,9 +25,15 @@ st.markdown("""
         text-align: center;
     }
     
+    /* Center container untuk tajuk dan teks */
+    .centered-text {
+        text-align: center;
+        width: 100%;
+    }
+
     /* Melaraskan saiz teks label di sidebar (selepas login) */
     .sidebar-label {
-        font-size: 12px !important; /* Saiz teks label sidebar yang dicadangkan */
+        font-size: 12px !important; 
         font-weight: bold;
         text-align: center;
     }
@@ -64,17 +70,20 @@ def format_to_dms(deg):
 # ================= 3. SISTEM KESELAMATAN (LOGIN) =================
 if not st.session_state['auth']:
     # Menggunakan columns untuk meletakkan kandungan di tengah halaman
-    _, col_mid, _ = st.columns([1, 2, 1]) # Melebarkan sedikit column tengah
+    _, col_mid, _ = st.columns([1, 1.5, 1]) 
     with col_mid:
-        # --- PERUBAHAN: Logo dibesarkan (width=350) dan disusun ke tengah oleh CSS ---
-        st.image(GITHUB_LOGO_URL, width=350)
+        # --- PERUBAHAN: Logo dikecilkan sedikit (width=250) ---
+        st.image(GITHUB_LOGO_URL, width=250)
         
-        # --- PERUBAHAN: Label dibesarkan menggunakan HTML h3/h4 agar lebih jelas sebelum login ---
-        st.markdown("<h3>POLITEKNIK UNGKU OMAR</h3>", unsafe_allow_html=True)
-        st.markdown("<h4>JABATAN KEJURUTERAAN AWAM</h4>", unsafe_allow_html=True)
-        st.markdown("<br>", unsafe_allow_html=True) # Jarak tambahan
-        
-        st.title("🏛️ SISTEM MAKLUMAT TANAH")
+        # --- PERUBAHAN: Label disusun ke tengah sebelum Log In ---
+        st.markdown("""
+            <div class="centered-text">
+                <h3 style='margin-bottom: 0;'>POLITEKNIK UNGKU OMAR</h3>
+                <h4 style='margin-top: 0; color: #555;'>JABATAN KEJURUTERAAN AWAM</h4>
+                <hr>
+                <h2 style='margin-bottom: 20px;'>🏛️ SISTEM MAKLUMAT TANAH</h2>
+            </div>
+        """, unsafe_allow_html=True)
         
         if st.session_state['reset_mode']:
             st.subheader("🔑 Reset Kata Laluan")
@@ -96,19 +105,17 @@ if not st.session_state['auth']:
                 st.rerun()
         
         else:
-            u_id = st.text_input("Masukkan ID Pengguna (Contoh: USER01)")
+            u_id = st.text_input("ID Pengguna")
             p_in = st.text_input("Kata Laluan", type="password")
             
             # Container untuk butang log masuk agar kemas di tengah
-            button_container = st.container()
-            with button_container:
-                if st.button("Masuk", use_container_width=True):
-                    if u_id in USER_DATABASE and p_in == st.session_state['passwords'].get(u_id):
-                        st.session_state['auth'] = True
-                        st.session_state['current_user'] = USER_DATABASE[u_id]
-                        st.rerun()
-                    else:
-                        st.error("ID atau Kata Laluan Salah!")
+            if st.button("Masuk", use_container_width=True):
+                if u_id in USER_DATABASE and p_in == st.session_state['passwords'].get(u_id):
+                    st.session_state['auth'] = True
+                    st.session_state['current_user'] = USER_DATABASE[u_id]
+                    st.rerun()
+                else:
+                    st.error("ID atau Kata Laluan Salah!")
             
             if st.button("Lupa Kata Laluan?"): 
                 st.session_state['reset_mode'] = True
@@ -117,18 +124,15 @@ if not st.session_state['auth']:
 
 # ================= 4. INTERFACE KAWALAN SIDEBAR =================
 with st.sidebar:
-    # Menggunakan columns di dalam sidebar untuk menengahkan logo
     col1, col2, col3 = st.columns([1, 3, 1])
     with col2:
-        # --- PERUBAHAN: Logo di sidebar dilaraskan (width=150) agar tidak terlalu besar di ruang sempit ---
         st.image(GITHUB_LOGO_URL, width=150)
         
-    # --- PERUBAHAN: Menggunakan kelas CSS untuk melaraskan saiz teks label di sidebar ---
     st.markdown('<p class="sidebar-label">POLITEKNIK UNGKU OMAR</p>', unsafe_allow_html=True)
     st.markdown('<p class="sidebar-sublabel">JABATAN KEJURUTERAAN AWAM</p>', unsafe_allow_html=True)
     st.markdown("---")
     
-    st.success(f"Welcome back,{st.session_state['current_user']} ✨")
+    st.success(f"Welcome back, {st.session_state['current_user']} ✨")
     st.header("🎮 Kawalan Lapisan")
     
     show_sat = st.checkbox("Peta Satelit (Google)", value=True)
@@ -262,5 +266,3 @@ if uploaded_file:
 
     else:
         st.error("Ralat: Fail CSV tidak mengandungi lajur 'E' and 'N'.")
-
-
